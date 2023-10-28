@@ -87,7 +87,7 @@ namespace VaultSharp
         /// Use this option to use e.g. a factory like the HttpClientHandlerFactory from Microsoft.
         /// </summary>
         public Func<WinHttpHandler> HttpClientHandlerProviderFunc { get; set; }
-#else
+#elif NETSTANDARD2_0 || NETSTANDARD2_1 || NET481
         /// <summary>
         /// A factory delegate to use if you want to provide your own http client handler.
         /// Don't worry about setting any vault specific values on your http client handler.
@@ -96,6 +96,15 @@ namespace VaultSharp
         /// Use this option to use e.g. a factory like the HttpClientHandlerFactory from Microsoft.
         /// </summary>
         public Func<HttpClientHandler> HttpClientHandlerProviderFunc { get; set; }
+#else
+        /// <summary>
+        /// A factory delegate to use if you want to provide your own http client handler.
+        /// Don't worry about setting any vault specific values on your http client handler.
+        /// Just create your http client handler and pass it in. 
+        /// VaultSharp will set all the necessary things.
+        /// Use this option to use e.g. a factory like the HttpClientHandlerFactory from Microsoft.
+        /// </summary>
+        public Func<SocketsHttpHandler> HttpClientHandlerProviderFunc { get; set; }
 #endif
 
         /// <summary>

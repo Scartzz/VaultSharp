@@ -15,6 +15,8 @@ using System.Text.Json;
 
 namespace VaultSharp.Core
 {
+    using System.Security.Cryptography.X509Certificates;
+
     internal class Polymath : IDisposable
     {
         private const string VaultRequestHeaderKey = "X-Vault-Request";
@@ -37,8 +39,7 @@ namespace VaultSharp.Core
         public Polymath(VaultClientSettings vaultClientSettings)
         {
             VaultClientSettings = vaultClientSettings;
-
-#if NET45
+            
             var handler = vaultClientSettings.HttpClientHandlerProviderFunc();
 
             // if auth method is kerberos, then set the credentials in the handler.
@@ -46,31 +47,14 @@ namespace VaultSharp.Core
             {
                 var kerberosAuthMethodInfo = vaultClientSettings.AuthMethodInfo as KerberosAuthMethodInfo;
                 handler.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
-                handler.Credentials = kerberosAuthMethodInfo.Credentials;
-            }
-#elif NET46 || NET461 || NET462 || NET47 || NET471 || NET472 || NET48
-
-            var handler = vaultClientSettings.HttpClientHandlerProviderFunc();
-
-            // if auth method is kerberos, then set the credentials in the handler.
-            if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Kerberos)
-            {
-                var kerberosAuthMethodInfo = vaultClientSettings.AuthMethodInfo as KerberosAuthMethodInfo;
-                handler.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
+#if NET46 || NET461 || NET462 || NET47 || NET471 || NET472 || NET48
                 handler.ServerCredentials = kerberosAuthMethodInfo.Credentials;
-            }
 #else
-            var handler = vaultClientSettings.HttpClientHandlerProviderFunc();
-
-            // if auth method is kerberos, then set the credentials in the handler.
-            if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Kerberos)
-            {
-                var kerberosAuthMethodInfo = vaultClientSettings.AuthMethodInfo as KerberosAuthMethodInfo;
-                handler.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
                 handler.Credentials = kerberosAuthMethodInfo.Credentials;
-            }
 #endif
+            }
 
+#if NET45 || NET46 || NET461 || NET462 || NET47 || NET471 || NET472 || NET48 ||  NETSTANDARD2_0 || NETSTANDARD2_1 || NET481
             // not the best place, but a very convenient place to add cert of certauthmethod.
             if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Cert)
             {
@@ -88,6 +72,27 @@ namespace VaultSharp.Core
                     }
                 }
             }
+#else
+            // not the best place, but a very convenient place to add cert of certauthmethod.
+            if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Cert)
+            {
+                var certAuthMethodInfo = vaultClientSettings.AuthMethodInfo as CertAuthMethodInfo;
+
+                if (certAuthMethodInfo.ClientCertificate != null)
+                {
+                    handler.SslOptions.ClientCertificates ??= new X509CertificateCollection();
+                    handler.SslOptions.ClientCertificates.Add(certAuthMethodInfo.ClientCertificate);
+                }
+                else
+                {
+                    if (certAuthMethodInfo.ClientCertificateCollection != null)
+                    {
+                        handler.SslOptions.ClientCertificates ??= new X509CertificateCollection();
+                        handler.SslOptions.ClientCertificates.AddRange(certAuthMethodInfo.ClientCertificateCollection);
+                    }
+                }
+            }
+#endif
 
             vaultClientSettings.PostProcessHttpClientHandlerAction?.Invoke(handler);
 

@@ -6,7 +6,8 @@
     <DelaySign>false</DelaySign>
     <AssemblyOriginatorKeyFile>VaultSharp.snk</AssemblyOriginatorKeyFile>
     <Title>VaultSharp</Title>
-    <Version>1.13.0.2</Version>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Version>1.14.0.1000</Version>
     <Authors>Raja Nadar</Authors>
     <Copyright>Copyright ©  2023 Raja Nadar. All rights reserved.</Copyright>
     <PackageProjectUrl>https://github.com/rajanadar/VaultSharp</PackageProjectUrl>
