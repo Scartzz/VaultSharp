@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net462;net47;net471;net472;net48;net481;netstandard2.0;netstandard2.1;net6.0;net7.0;</TargetFrameworks>
+    <TargetFrameworks>net462;net47;net471;net472;net48;net481;netstandard2.0;netstandard2.1;net6.0;net7.0;net8.0;</TargetFrameworks>
     <SignAssembly>true</SignAssembly>
     <DelaySign>false</DelaySign>
     <AssemblyOriginatorKeyFile>VaultSharp.snk</AssemblyOriginatorKeyFile>
     <Title>VaultSharp</Title>
-    <Version>1.13.0.1</Version>
+    <Version>1.13.0.2</Version>
     <Authors>Raja Nadar</Authors>
     <Copyright>Copyright ©  2023 Raja Nadar. All rights reserved.</Copyright>
     <PackageProjectUrl>https://github.com/rajanadar/VaultSharp</PackageProjectUrl>
@@ -23,8 +23,8 @@
 This library is built with .NET Standard 2.0, .NET Standard 2.1, 4.6.2, 4.7.2*, 4.8, .NET 6  &amp; .NET 7 and hence is cross-platform across .NET Core 2.x, 3.x, .NET Frameworks 4.x, Xamarin iOS, Android, Mac, UWP etc.</Description>
     <RepositoryType>Github</RepositoryType>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <AssemblyVersion>1.13.0.1</AssemblyVersion>
-    <FileVersion>1.13.0.1</FileVersion>
+    <AssemblyVersion>1.13.0.2</AssemblyVersion>
+    <FileVersion>1.13.0.2</FileVersion>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     
@@ -187,6 +187,16 @@ This library is built with .NET Standard 2.0, .NET Standard 2.1, 4.6.2, 4.7.2*, 
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net7.0'">
+    <PackageReference Include="System.Text.Json">
+      <Version>7.0.2</Version>
+    </PackageReference>
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)'=='net8.0'">
+    <AssemblyTitle>VaultSharp .NET 8</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <PackageReference Include="System.Text.Json">
       <Version>7.0.2</Version>
     </PackageReference>
