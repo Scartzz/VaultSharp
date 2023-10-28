@@ -525,6 +525,7 @@ namespace VaultSharp.Samples
             DisplayJson(oldSecretBackends);
             Assert.Equal(secretBackends.Data.Count(), oldSecretBackends.Data.Count());
 
+            _authenticatedVaultClient.Dispose();
             // raja todo:
             return;
 
@@ -829,6 +830,7 @@ namespace VaultSharp.Samples
             masterCredentials.Base64MasterKeys = quick.Base64MasterKeys;
 
             authSettings = GetVaultClientSettings(new TokenAuthMethodInfo(masterCredentials.RootToken));
+            _authenticatedVaultClient.Dispose();
             _authenticatedVaultClient = new VaultClient(authSettings);
 
             var data = new Dictionary<string, object>
@@ -864,6 +866,7 @@ namespace VaultSharp.Samples
             unwrappedResponse = _authenticatedVaultClient.V1.System.UnwrapWrappedResponseDataAsync<Dictionary<string, object>>(wrappedResponse.WrapInfo.Token).Result;
             DisplayJson(unwrappedResponse);
             Assert.True(unwrappedResponse.Data.Count == 0);
+            _authenticatedVaultClient.Dispose();
         }
     }
 }

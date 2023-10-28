@@ -69,6 +69,35 @@ namespace VaultSharp
         /// </summary>
         public string Namespace { get; set; }
 
+#if NET45
+        /// <summary>
+        /// A factory delegate to use if you want to provide your own http client handler.
+        /// Don't worry about setting any vault specific values on your http client handler.
+        /// Just create your http client handler and pass it in. 
+        /// VaultSharp will set all the necessary things.
+        /// Use this option to use e.g. a factory like the HttpClientHandlerFactory from Microsoft.
+        /// </summary>
+        public Func<WebRequestHandler> HttpClientHandlerProviderFunc { get; set; }
+#elif NET46 || NET461 || NET462 || NET47 || NET471 || NET472 || NET48
+        /// <summary>
+        /// A factory delegate to use if you want to provide your own http client handler.
+        /// Don't worry about setting any vault specific values on your http client handler.
+        /// Just create your http client handler and pass it in. 
+        /// VaultSharp will set all the necessary things.
+        /// Use this option to use e.g. a factory like the HttpClientHandlerFactory from Microsoft.
+        /// </summary>
+        public Func<WinHttpHandler> HttpClientHandlerProviderFunc { get; set; }
+#else
+        /// <summary>
+        /// A factory delegate to use if you want to provide your own http client handler.
+        /// Don't worry about setting any vault specific values on your http client handler.
+        /// Just create your http client handler and pass it in. 
+        /// VaultSharp will set all the necessary things.
+        /// Use this option to use e.g. a factory like the HttpClientHandlerFactory from Microsoft.
+        /// </summary>
+        public Func<HttpClientHandler> HttpClientHandlerProviderFunc { get; set; }
+#endif
+
         /// <summary>
         /// A factory delegate to use if you want to provide your own http client.
         /// The Handler already has the certificates etc. enabled. 
@@ -78,7 +107,7 @@ namespace VaultSharp
         /// Use the handler parameter to set proxy etc. 
         /// It is essential that your HttpClient use the handler, since it has certificate auth etc.
         /// </summary>
-        public Func<HttpMessageHandler, HttpClient> MyHttpClientProviderFunc { get; set; }
+        public Func<HttpMessageHandler, HttpClient> HttpClientProviderFunc { get; set; }
 
         /// <summary>
         /// Use custom secret engine mount points globally rather than on every method call.

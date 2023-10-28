@@ -365,6 +365,7 @@ namespace VaultSharp.Samples
 
             // all done. get rid of the backend.
             _authenticatedVaultClient.V1.System.UnmountAuthBackendAsync(newApproleAuthBackend.Path).Wait();
+            _authenticatedVaultClient.Dispose();
         }
     }
 }

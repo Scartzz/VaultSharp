@@ -45,6 +45,8 @@ namespace VaultSharp.Samples
                         RunAllIntegrationTests();
 
                         Console.SetOut(existingOut);
+                        
+                        _unauthenticatedVaultClient.Dispose();
 
                         Console.WriteLine();
                         Console.Write("I think we are done here. Press any key to exit...");
@@ -104,7 +106,7 @@ namespace VaultSharp.Samples
                     }
                 },
                 Namespace = "bhjk",
-                MyHttpClientProviderFunc = handler => new HttpClient(handler)
+                HttpClientProviderFunc = handler => new HttpClient(handler)
             };
 
             return settings;

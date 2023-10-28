@@ -15,7 +15,7 @@ using System.Text.Json;
 
 namespace VaultSharp.Core
 {
-    internal class Polymath
+    internal class Polymath : IDisposable
     {
         private const string VaultRequestHeaderKey = "X-Vault-Request";
         private const string NamespaceHeaderKey = "X-Vault-Namespace";
@@ -27,6 +27,7 @@ namespace VaultSharp.Core
 
         private readonly HttpClient _httpClient;
         private Lazy<Task<string>> _lazyVaultToken;
+        private bool _disposed;
         private readonly IAuthMethodLoginProvider _authMethodLoginProvider;
 
         public HttpMethod ListHttpMethod { get; } = new HttpMethod("LIST");
@@ -38,7 +39,7 @@ namespace VaultSharp.Core
             VaultClientSettings = vaultClientSettings;
 
 #if NET45
-            var handler = new WebRequestHandler();
+            var handler = vaultClientSettings.HttpClientHandlerProviderFunc();
 
             // if auth method is kerberos, then set the credentials in the handler.
             if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Kerberos)
@@ -47,10 +48,9 @@ namespace VaultSharp.Core
                 handler.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
                 handler.Credentials = kerberosAuthMethodInfo.Credentials;
             }
-
 #elif NET46 || NET461 || NET462 || NET47 || NET471 || NET472 || NET48
 
-            var handler = new WinHttpHandler();
+            var handler = vaultClientSettings.HttpClientHandlerProviderFunc();
 
             // if auth method is kerberos, then set the credentials in the handler.
             if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Kerberos)
@@ -59,9 +59,8 @@ namespace VaultSharp.Core
                 handler.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
                 handler.ServerCredentials = kerberosAuthMethodInfo.Credentials;
             }
-
 #else
-            var handler = new HttpClientHandler();
+            var handler = vaultClientSettings.HttpClientHandlerProviderFunc();
 
             // if auth method is kerberos, then set the credentials in the handler.
             if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Kerberos)
@@ -70,7 +69,6 @@ namespace VaultSharp.Core
                 handler.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
                 handler.Credentials = kerberosAuthMethodInfo.Credentials;
             }
-
 #endif
 
             // not the best place, but a very convenient place to add cert of certauthmethod.
@@ -93,7 +91,7 @@ namespace VaultSharp.Core
 
             vaultClientSettings.PostProcessHttpClientHandlerAction?.Invoke(handler);
 
-            _httpClient = VaultClientSettings.MyHttpClientProviderFunc == null ? new HttpClient(handler) : VaultClientSettings.MyHttpClientProviderFunc(handler);
+            _httpClient = VaultClientSettings.HttpClientProviderFunc == null ? new HttpClient(handler) : VaultClientSettings.HttpClientProviderFunc(handler);
 
             _httpClient.BaseAddress = new Uri(VaultClientSettings.VaultServerUriWithPort);
 
@@ -109,9 +107,18 @@ namespace VaultSharp.Core
                 SetVaultTokenDelegate();
             }
         }
+        
+        ~Polymath() => Dispose(false);
+
+        private void CheckDisposed()
+        {
+            if (this._disposed)
+                throw new ObjectDisposedException(this.GetType().FullName);
+        }
 
         internal void SetVaultTokenDelegate()
         {
+            CheckDisposed();
             if (_authMethodLoginProvider != null)
             {
                 _lazyVaultToken = new Lazy<Task<string>>(_authMethodLoginProvider.GetVaultTokenAsync, LazyThreadSafetyMode.PublicationOnly);
@@ -120,6 +127,7 @@ namespace VaultSharp.Core
 
         internal async Task PerformImmediateLogin()
         {
+            CheckDisposed();
             if (_authMethodLoginProvider != null)
             {
                 // make a dummy call, that will force a login.
@@ -129,6 +137,7 @@ namespace VaultSharp.Core
 
         public async Task MakeVaultApiRequest(string mountPoint, string path, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, bool unauthenticated = false)
         {
+            CheckDisposed();
             Checker.NotNull(mountPoint, "mountPoint");
             
             await MakeVaultApiRequest(VaultSharpV1Path + mountPoint.Trim('/') + path, httpMethod, requestData, rawResponse, unauthenticated: unauthenticated).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
@@ -136,11 +145,13 @@ namespace VaultSharp.Core
 
         public async Task MakeVaultApiRequest(string resourcePath, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, bool unauthenticated = false)
         {
+            CheckDisposed();
             await MakeVaultApiRequest<JsonObject>(resourcePath, httpMethod, requestData, rawResponse, unauthenticated: unauthenticated).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
         }
 
         public async Task<TResponse> MakeVaultApiRequest<TResponse>(string mountPoint, string path, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, Action<HttpResponseMessage> postResponseAction = null, string wrapTimeToLive = null, bool unauthenticated = false) where TResponse : class 
         {
+            CheckDisposed();
             Checker.NotNull(mountPoint, "mountPoint");
 
             return await MakeVaultApiRequest<TResponse>(VaultSharpV1Path + mountPoint.Trim('/') + path, httpMethod, requestData, rawResponse, postResponseAction, wrapTimeToLive, unauthenticated).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
@@ -148,6 +159,7 @@ namespace VaultSharp.Core
 
         public async Task<TResponse> MakeVaultApiRequest<TResponse>(string resourcePath, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, Action<HttpResponseMessage> postResponseAction = null, string wrapTimeToLive = null, bool unauthenticated = false) where TResponse : class
         {
+            CheckDisposed();
             var headers = new Dictionary<string, string>();
 
             if (!unauthenticated && _lazyVaultToken != null)
@@ -194,6 +206,7 @@ namespace VaultSharp.Core
 
         protected async Task<TResponse> MakeRequestAsync<TResponse>(string resourcePath, HttpMethod httpMethod, object requestData = null, IDictionary<string, string> headers = null, bool rawResponse = false, Action<HttpResponseMessage> postResponseAction = null) where TResponse : class
         {
+            CheckDisposed();
             try
             {
                 var requestUri = new Uri(_httpClient.BaseAddress, new Uri(resourcePath, UriKind.Relative));
@@ -302,6 +315,27 @@ namespace VaultSharp.Core
 
                 throw;
             }
+        }
+
+        public void Dispose()
+        {
+            // Dispose of unmanaged resources.
+            Dispose(true);
+            // Suppress finalization.
+            GC.SuppressFinalize(this);
+        }
+        
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _httpClient.Dispose();
+            _lazyVaultToken = null;
+
+            _disposed = true;
         }
     }
 }
