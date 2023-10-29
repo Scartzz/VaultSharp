@@ -8,7 +8,7 @@ namespace VaultSharp
     /// Provides an interface to interact with Vault as a client.
     /// This is the only entry point for consuming the Vault Client.
     /// </summary>
-    public interface IVaultClient : IDisposable
+    public interface IVaultClient
     {
         /// <summary>
         /// Gets the Vault Client Settings.

@@ -17,7 +17,15 @@ namespace VaultSharp.Core
 {
     using System.Security.Cryptography.X509Certificates;
 
-    internal class Polymath : IDisposable
+    public class HttpRequestSettings
+    {
+        public bool PreAuthenticate { get; internal set; }
+        public ICredentials Credentials { get; internal set; }
+        public X509CertificateCollection ClientCertificates { get; internal set; }
+        public TimeSpan Timeout { get; internal set; }
+    }
+    
+    internal class Polymath
     {
         private const string VaultRequestHeaderKey = "X-Vault-Request";
         private const string NamespaceHeaderKey = "X-Vault-Namespace";
@@ -27,10 +35,10 @@ namespace VaultSharp.Core
 
         private const string VaultSharpV1Path = "v1/";
 
-        private readonly HttpClient _httpClient;
         private Lazy<Task<string>> _lazyVaultToken;
-        private bool _disposed;
         private readonly IAuthMethodLoginProvider _authMethodLoginProvider;
+        private readonly Uri _baseAddress;
+        private readonly HttpRequestSettings _httpRequestSettings;
 
         public HttpMethod ListHttpMethod { get; } = new HttpMethod("LIST");
 
@@ -39,22 +47,21 @@ namespace VaultSharp.Core
         public Polymath(VaultClientSettings vaultClientSettings)
         {
             VaultClientSettings = vaultClientSettings;
-            
-            var handler = vaultClientSettings.HttpClientHandlerProviderFunc();
+
+            if (VaultClientSettings.HttpRequestFunc is null)
+                throw new InvalidOperationException("HttpRequestFunc not specified!");
+
+            _httpRequestSettings = new HttpRequestSettings();
 
             // if auth method is kerberos, then set the credentials in the handler.
             if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Kerberos)
             {
                 var kerberosAuthMethodInfo = vaultClientSettings.AuthMethodInfo as KerberosAuthMethodInfo;
-                handler.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
-#if NET46 || NET461 || NET462 || NET47 || NET471 || NET472 || NET48
-                handler.ServerCredentials = kerberosAuthMethodInfo.Credentials;
-#else
-                handler.Credentials = kerberosAuthMethodInfo.Credentials;
-#endif
+                
+                _httpRequestSettings.PreAuthenticate = kerberosAuthMethodInfo.PreAuthenticate;
+                _httpRequestSettings.Credentials = kerberosAuthMethodInfo.Credentials;
             }
-
-#if NET45 || NET46 || NET461 || NET462 || NET47 || NET471 || NET472 || NET48 ||  NETSTANDARD2_0 || NETSTANDARD2_1 || NET481
+            
             // not the best place, but a very convenient place to add cert of certauthmethod.
             if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Cert)
             {
@@ -62,47 +69,30 @@ namespace VaultSharp.Core
 
                 if (certAuthMethodInfo.ClientCertificate != null)
                 {
-                    handler.ClientCertificates.Add(certAuthMethodInfo.ClientCertificate);
+                    if (_httpRequestSettings.ClientCertificates is null)
+                    {
+                        _httpRequestSettings.ClientCertificates = new X509CertificateCollection();
+                    }
+                    _httpRequestSettings.ClientCertificates.Add(certAuthMethodInfo.ClientCertificate);
                 }
                 else
                 {
                     if (certAuthMethodInfo.ClientCertificateCollection != null)
                     {
-                        handler.ClientCertificates.AddRange(certAuthMethodInfo.ClientCertificateCollection);
+                        if (_httpRequestSettings.ClientCertificates is null)
+                        {
+                            _httpRequestSettings.ClientCertificates = new X509CertificateCollection();
+                        }
+                        _httpRequestSettings.ClientCertificates.AddRange(certAuthMethodInfo.ClientCertificateCollection);
                     }
                 }
             }
-#else
-            // not the best place, but a very convenient place to add cert of certauthmethod.
-            if (vaultClientSettings.AuthMethodInfo?.AuthMethodType == AuthMethodType.Cert)
-            {
-                var certAuthMethodInfo = vaultClientSettings.AuthMethodInfo as CertAuthMethodInfo;
 
-                if (certAuthMethodInfo.ClientCertificate != null)
-                {
-                    handler.SslOptions.ClientCertificates ??= new X509CertificateCollection();
-                    handler.SslOptions.ClientCertificates.Add(certAuthMethodInfo.ClientCertificate);
-                }
-                else
-                {
-                    if (certAuthMethodInfo.ClientCertificateCollection != null)
-                    {
-                        handler.SslOptions.ClientCertificates ??= new X509CertificateCollection();
-                        handler.SslOptions.ClientCertificates.AddRange(certAuthMethodInfo.ClientCertificateCollection);
-                    }
-                }
-            }
-#endif
-
-            vaultClientSettings.PostProcessHttpClientHandlerAction?.Invoke(handler);
-
-            _httpClient = VaultClientSettings.HttpClientProviderFunc == null ? new HttpClient(handler) : VaultClientSettings.HttpClientProviderFunc(handler);
-
-            _httpClient.BaseAddress = new Uri(VaultClientSettings.VaultServerUriWithPort);
+            _baseAddress = new Uri(VaultClientSettings.VaultServerUriWithPort);
 
             if (VaultClientSettings.VaultServiceTimeout != null)
             {
-                _httpClient.Timeout = VaultClientSettings.VaultServiceTimeout.Value;
+                _httpRequestSettings.Timeout = VaultClientSettings.VaultServiceTimeout.Value;
             }
 
             if (VaultClientSettings.AuthMethodInfo != null)
@@ -112,18 +102,9 @@ namespace VaultSharp.Core
                 SetVaultTokenDelegate();
             }
         }
-        
-        ~Polymath() => Dispose(false);
-
-        private void CheckDisposed()
-        {
-            if (this._disposed)
-                throw new ObjectDisposedException(this.GetType().FullName);
-        }
 
         internal void SetVaultTokenDelegate()
         {
-            CheckDisposed();
             if (_authMethodLoginProvider != null)
             {
                 _lazyVaultToken = new Lazy<Task<string>>(_authMethodLoginProvider.GetVaultTokenAsync, LazyThreadSafetyMode.PublicationOnly);
@@ -132,7 +113,6 @@ namespace VaultSharp.Core
 
         internal async Task PerformImmediateLogin()
         {
-            CheckDisposed();
             if (_authMethodLoginProvider != null)
             {
                 // make a dummy call, that will force a login.
@@ -142,7 +122,6 @@ namespace VaultSharp.Core
 
         public async Task MakeVaultApiRequest(string mountPoint, string path, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, bool unauthenticated = false)
         {
-            CheckDisposed();
             Checker.NotNull(mountPoint, "mountPoint");
             
             await MakeVaultApiRequest(VaultSharpV1Path + mountPoint.Trim('/') + path, httpMethod, requestData, rawResponse, unauthenticated: unauthenticated).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
@@ -150,13 +129,11 @@ namespace VaultSharp.Core
 
         public async Task MakeVaultApiRequest(string resourcePath, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, bool unauthenticated = false)
         {
-            CheckDisposed();
             await MakeVaultApiRequest<JsonObject>(resourcePath, httpMethod, requestData, rawResponse, unauthenticated: unauthenticated).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
         }
 
         public async Task<TResponse> MakeVaultApiRequest<TResponse>(string mountPoint, string path, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, Action<HttpResponseMessage> postResponseAction = null, string wrapTimeToLive = null, bool unauthenticated = false) where TResponse : class 
         {
-            CheckDisposed();
             Checker.NotNull(mountPoint, "mountPoint");
 
             return await MakeVaultApiRequest<TResponse>(VaultSharpV1Path + mountPoint.Trim('/') + path, httpMethod, requestData, rawResponse, postResponseAction, wrapTimeToLive, unauthenticated).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
@@ -164,7 +141,6 @@ namespace VaultSharp.Core
 
         public async Task<TResponse> MakeVaultApiRequest<TResponse>(string resourcePath, HttpMethod httpMethod, object requestData = null, bool rawResponse = false, Action<HttpResponseMessage> postResponseAction = null, string wrapTimeToLive = null, bool unauthenticated = false) where TResponse : class
         {
-            CheckDisposed();
             var headers = new Dictionary<string, string>();
 
             if (!unauthenticated && _lazyVaultToken != null)
@@ -209,81 +185,69 @@ namespace VaultSharp.Core
             };
         }
 
-        protected async Task<TResponse> MakeRequestAsync<TResponse>(string resourcePath, HttpMethod httpMethod, object requestData = null, IDictionary<string, string> headers = null, bool rawResponse = false, Action<HttpResponseMessage> postResponseAction = null) where TResponse : class
+        private static HttpRequestMessage BuildRequest(Uri baseAddress, string resourcePath, HttpMethod httpMethod, object requestData = null, IDictionary<string, string> headers = null)
         {
-            CheckDisposed();
+            var requestUri = new Uri(baseAddress, new Uri(resourcePath, UriKind.Relative));
+
+            var requestContent = requestData != null ? new StringContent(JsonSerializer.Serialize(requestData), Encoding.UTF8) : null;
+
+            HttpRequestMessage httpRequestMessage = null;
+
+            switch (httpMethod.ToString().ToUpperInvariant())
+            {
+                case "LIST":
+                case "GET":
+                case "DELETE":
+                case "HEAD":
+                    httpRequestMessage = new HttpRequestMessage(httpMethod, requestUri);
+                    break;
+                case "POST":
+                case "PUT":
+                    httpRequestMessage = new HttpRequestMessage(httpMethod, requestUri)
+                    {
+                        Content = requestContent,
+                    };
+                    break;
+                case "PATCH":
+                    httpRequestMessage = new HttpRequestMessage(httpMethod, requestUri)
+                    {
+                        Content = requestData != null ? new StringContent(JsonSerializer.Serialize(requestData), Encoding.UTF8, "application/merge-patch+json") : null,
+                    };
+                    break;
+                default:
+                    throw new NotSupportedException("The Http Method is not supported: " + httpMethod);
+            }
+
+            httpRequestMessage.Headers.Add(VaultRequestHeaderKey, "true");
+
+            if (headers != null)
+            {
+                foreach (var kv in headers)
+                {
+                    httpRequestMessage.Headers.Remove(kv.Key);
+                    httpRequestMessage.Headers.Add(kv.Key, kv.Value);
+                }
+            }
+
+            return httpRequestMessage;
+        }
+
+        private async Task<TResponse> MakeRequestAsync<TResponse>(string resourcePath, HttpMethod httpMethod, object requestData = null, IDictionary<string, string> headers = null, bool rawResponse = false, Action<HttpResponseMessage> postResponseAction = null) where TResponse : class
+        {
             try
             {
-                var requestUri = new Uri(_httpClient.BaseAddress, new Uri(resourcePath, UriKind.Relative));
+                var httpRequestMessage = BuildRequest(_baseAddress, resourcePath, httpMethod, requestData, headers);
 
-                var requestContent = requestData != null
-                    ? new StringContent(JsonSerializer.Serialize(requestData), Encoding.UTF8)
-                    : null;
+                VaultClientSettings.BeforeApiRequestAction?.Invoke(httpRequestMessage);
 
-                HttpRequestMessage httpRequestMessage = null;
-
-                switch (httpMethod.ToString().ToUpperInvariant())
-                {
-                    case "LIST":
-                    case "GET":
-                    case "DELETE":
-                    case "HEAD":
-
-                        httpRequestMessage = new HttpRequestMessage(httpMethod, requestUri);
-                        break;
-
-                    case "POST":
-                    case "PUT":
-
-                        httpRequestMessage = new HttpRequestMessage(httpMethod, requestUri)
-                        {
-                            Content = requestContent
-                        };
-
-                        break;
-
-                    case "PATCH":
-
-                        // We cannot directly add content type for httpRequestMessage
-                        // It is added via the RequestContent
-                        // https://stackoverflow.com/a/70593566/1174414
-
-                        httpRequestMessage = new HttpRequestMessage(httpMethod, requestUri)
-                        {
-                            Content = requestData != null 
-                            ? new StringContent(JsonSerializer.Serialize(requestData), Encoding.UTF8, "application/merge-patch+json")
-                            : null
-                        };
-
-                        break;
-
-                    default:
-                        throw new NotSupportedException("The Http Method is not supported: " + httpMethod);
-                }
-
-                httpRequestMessage.Headers.Add(VaultRequestHeaderKey, "true");
-
-                if (headers != null)
-                {
-                    foreach (var kv in headers)
-                    {
-                        httpRequestMessage.Headers.Remove(kv.Key);
-                        httpRequestMessage.Headers.Add(kv.Key, kv.Value);
-                    }
-                }
-
-                VaultClientSettings.BeforeApiRequestAction?.Invoke(_httpClient, httpRequestMessage);
-
-                var httpResponseMessage = await _httpClient.SendAsync(httpRequestMessage).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
+                HttpResponseMessage httpResponseMessage = await VaultClientSettings.HttpRequestFunc(_httpRequestSettings, httpRequestMessage).ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
 
                 // internal delegate.
                 postResponseAction?.Invoke(httpResponseMessage);
 
                 VaultClientSettings.AfterApiResponseAction?.Invoke(httpResponseMessage);
 
-                var responseText =
-                    await
-                        httpResponseMessage.Content.ReadAsStringAsync().ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
+                var responseText = await httpResponseMessage.Content.ReadAsStringAsync().ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
 
                 if (httpResponseMessage.IsSuccessStatusCode)
                 {
@@ -306,7 +270,7 @@ namespace VaultSharp.Core
                     {
                         string responseText;
 
-                        using (var stream = new StreamReader(response.GetResponseStream()))
+                        using (var stream = new StreamReader(response.GetResponseStream() ?? throw new InvalidOperationException()))
                         {
                             responseText =
                                 await stream.ReadToEndAsync().ConfigureAwait(VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
@@ -320,27 +284,6 @@ namespace VaultSharp.Core
 
                 throw;
             }
-        }
-
-        public void Dispose()
-        {
-            // Dispose of unmanaged resources.
-            Dispose(true);
-            // Suppress finalization.
-            GC.SuppressFinalize(this);
-        }
-        
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _httpClient.Dispose();
-            _lazyVaultToken = null;
-
-            _disposed = true;
         }
     }
 }
