@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace VaultSharp.V1.SecretsEngines.Database
 {
+    using System.Text.Json;
+
     /// <summary>
     /// Role definition.
     /// </summary>
@@ -12,7 +14,7 @@ namespace VaultSharp.V1.SecretsEngines.Database
         /// The name of the database connection to use for this role.
         /// </summary>
         [JsonPropertyName("db_name")]
-        public DatabaseProviderType DatabaseProviderType { get; set; }
+        public string DatabaseName { get; set; }
 
         /// <summary>
         /// Specifies the TTL for the leases associated with this role. 
@@ -20,7 +22,7 @@ namespace VaultSharp.V1.SecretsEngines.Database
         /// Defaults to system/engine default TTL time.
         /// </summary>
         [JsonPropertyName("default_ttl")]
-        public string DefaultTimeToLive { get; set; }
+        public object DefaultTimeToLive { get; set; }
 
         /// <summary>
         /// Specifies the maximum TTL for the leases associated with this role. 
@@ -30,7 +32,7 @@ namespace VaultSharp.V1.SecretsEngines.Database
         /// (or, if not set, the system max TTL), but it is not allowed to be longer.
         /// </summary>
         [JsonPropertyName("max_ttl")]
-        public string MaximumTimeToLive { get; set; }
+        public object MaximumTimeToLive { get; set; }
 
         /// <summary>
         /// Specifies the database statements executed to create and configure a user.

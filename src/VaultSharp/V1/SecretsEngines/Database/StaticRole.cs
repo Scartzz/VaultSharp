@@ -19,7 +19,7 @@ namespace VaultSharp.V1.SecretsEngines.Database
         /// The name of the database connection to use for this role.
         /// </summary>
         [JsonPropertyName("db_name")]
-        public DatabaseProviderType DatabaseProviderType { get; set; }
+        public string DatabaseName { get; set; }
 
         /// <summary>
         /// Specifies the database statements to be executed to rotate the password for the configured database user. 

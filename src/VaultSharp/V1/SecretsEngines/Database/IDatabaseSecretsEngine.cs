@@ -3,11 +3,18 @@ using VaultSharp.V1.Commons;
 
 namespace VaultSharp.V1.SecretsEngines.Database
 {
+    using System.Collections.Generic;
+
     /// <summary>
     /// Database Secrets Engine.
     /// </summary>
     public interface IDatabaseSecretsEngine
     {
+        Task<Secret<Connection>> ReadConnectionAsync(string connectionName, string mountPoint = null, string wrapTimeToLive = null);
+        Task AllowRolesForConnection(string connectionName, List<string> allRoleNames, string mountPoint = null);
+        Task CreateConnectionAsync(string connectionName, NewConnection newConnection, string mountPoint = null);
+        Task RotateRootAsync(string connectionName, string mountPoint = null);
+        
         /// <summary>
         /// This endpoint creates or updates a role definition.
         /// </summary>

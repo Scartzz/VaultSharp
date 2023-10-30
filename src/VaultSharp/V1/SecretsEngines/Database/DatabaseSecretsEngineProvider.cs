@@ -5,6 +5,8 @@ using VaultSharp.V1.Commons;
 
 namespace VaultSharp.V1.SecretsEngines.Database
 {
+    using System.Collections.Generic;
+
     internal class DatabaseSecretsEngineProvider : IDatabaseSecretsEngine
     {
         private readonly Polymath _polymath;
@@ -14,6 +16,35 @@ namespace VaultSharp.V1.SecretsEngines.Database
             _polymath = polymath;
         }
 
+        public async Task<Secret<Connection>> ReadConnectionAsync(string connectionName, string mountPoint = null, string wrapTimeToLive = null)
+        {
+            Checker.NotNull(connectionName, "connectionName");
+
+            return await _polymath.MakeVaultApiRequest<Secret<Connection>>(mountPoint ?? _polymath.VaultClientSettings.SecretsEngineMountPoints.Database, "/config/" + connectionName.Trim('/'), HttpMethod.Get, wrapTimeToLive: wrapTimeToLive).ConfigureAwait(_polymath.VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
+        }
+        
+        public async  Task AllowRolesForConnection(string connectionName, List<string> allRoleNames, string mountPoint = null)
+        {
+            Checker.NotNull(connectionName, "connectionName");
+
+            await _polymath.MakeVaultApiRequest(mountPoint ?? _polymath.VaultClientSettings.SecretsEngineMountPoints.Database, "/config/" + connectionName.Trim('/'), HttpMethod.Post, new ConnectionPostAllowedRoles(){AllowedRoles = allRoleNames}).ConfigureAwait(_polymath.VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
+        }
+        
+        public async Task CreateConnectionAsync(string connectionName, NewConnection newConnection, string mountPoint = null)
+        {
+            Checker.NotNull(connectionName, "connectionName");
+            Checker.NotNull(newConnection, "newConnection");
+
+            await _polymath.MakeVaultApiRequest(mountPoint ?? _polymath.VaultClientSettings.SecretsEngineMountPoints.Database, "/config/" + connectionName.Trim('/'), HttpMethod.Post, newConnection).ConfigureAwait(_polymath.VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
+        }
+        
+        public async Task RotateRootAsync(string connectionName, string mountPoint = null)
+        {
+            Checker.NotNull(connectionName, "connectionName");
+
+            await _polymath.MakeVaultApiRequest(mountPoint ?? _polymath.VaultClientSettings.SecretsEngineMountPoints.Database, "/rotate-root/" + connectionName.Trim('/'), HttpMethod.Post).ConfigureAwait(_polymath.VaultClientSettings.ContinueAsyncTasksOnCapturedContext);
+        }
+        
         public async Task CreateRoleAsync(string roleName, Role role, string mountPoint = null)
         {
             Checker.NotNull(roleName, "roleName");
